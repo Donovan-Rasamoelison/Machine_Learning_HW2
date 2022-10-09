@@ -1,0 +1,155 @@
+---
+title: "ML_HW2"
+date: "2022-10-09"
+output: 
+  html_document:
+   toc: true
+   toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Donovan Rasamoelison - PSTAT 231 - HW2
+
+## Question 1 - Distribution of age
+```{r, message = F, warning = F}
+
+rm(list=ls())
+setwd("~/Desktop/2nd Year PhD/Machine learning/ML-HW2/Machine_Learning_HW2")
+
+library(tidyverse)
+library(ggplot2)
+library(tidymodels)
+library(yardstick)
+
+
+abalone <- read_csv("abalone.csv")
+
+
+abalone <- abalone %>%
+  mutate(age = rings + 1.5)
+
+ggplot(abalone, aes(x = age)) +
+  geom_histogram(fill='blue')
+
+```
+
+The histogram shows that  age is fairly evenly distributed although it is a bit skewed to the right. There are a few outliers with age larger than 30. 
+
+## Question 2 - Splitting the data
+```{r}
+set.seed(1)
+
+    #splitting the data
+abalone_split <- initial_split(abalone, prop = 0.80, strata = age)
+abalone_train <- training(abalone_split)
+abalone_test  <- testing(abalone_split)
+```
+
+## Question 3 - Using the training data
+```{r}
+abalone_recipe <- recipe(age ~ ., data = abalone_train) %>%
+  step_rm(rings) %>%
+  step_dummy(all_nominal_predictors()) %>%
+  step_interact(terms = ~ type_M:shucked_weight) %>%
+  step_interact(terms = ~ longest_shell:diameter) %>%
+  step_interact(terms = ~ shucked_weight:shell_weight) %>%
+  step_center(all_predictors()) %>%
+  step_scale(all_predictors())
+```
+
+## Question 4 - Creating lm engine 
+```{r}
+lm_model <- linear_reg() %>%
+  set_engine("lm")
+```
+
+
+## Question 5 - Setting the workflow
+```{r}
+lm_workflow <- workflow() %>%
+  add_model(lm_model) %>%
+  add_recipe(abalone_recipe)
+```
+
+## Question 6 - Fitting the model
+```{r}
+lm_fit <- fit(lm_workflow, abalone_train)
+
+lm_fit %>% 
+  extract_fit_parsnip() %>%
+  tidy()
+
+abalone_train_res <- predict(lm_fit, new_data = data.frame(
+  type = "I" , longest_shell = 0.5, diameter = 0.1, 
+  height = 0.3, whole_weight = 4, shucked_weight = 1,
+  viscera_weight = 2, shell_weight = 1 , rings = 1))
+
+abalone_train_res
+```
+
+## Question 7 - Assessing model performance
+
+The r-square of 55% indicates that 55% of the variation in age is explained by the regression.
+```{r}
+abalone_train_res2 <- predict(lm_fit, new_data = abalone_train %>% select(-age)) 
+
+abalone_train_res2 <- bind_cols(abalone_train_res2, abalone_train %>% select(age))
+
+abalone_metrics <- metric_set(rmse,rsq, mae)
+
+abalone_metrics(abalone_train_res2, truth = age, estimate = .pred)
+
+#Graphing
+
+abalone_train_res2 %>%
+  ggplot(aes(x=.pred, y = age)) +
+  geom_point(alpha = 0.2) +
+  geom_abline(lty=2) +
+  theme_bw() +
+  coord_obs_pred() +
+  ylab("True Age") +
+  xlab("Predicted Age")
+  
+```
+
+# Only for 231 students
+
+## Question 8 - reproducible and irreducible error
+
+The reproducible error is $$ Var(\hat{f}(x_0)) + [Bias(\hat{f}(x_0))]^2$$ and the irreducible error is $$ Var(\epsilon)$$
+
+## Question 9 - Expected test error > irreducible error
+The formula of the expected test error is:
+$$E[(y-\hat{f}(x_0))^2] = Var(\hat{f}(x_0)) + [Bias(\hat{f}(x_0))]^2 + Var(\epsilon)$$ 
+
+Because $Var(\hat{f}(x_0)) + [Bias(\hat{f}(x_0))]^2$ is positive by construction, it has to be the case that $E[(y-\hat{f}(x_0))^2] > Var(\epsilon)$
+
+## Question 10 - Proof of the bias-variance tradeoff
+
+$$E[(y-\hat{f}(x))^2] = E[(f(x) + \epsilon -\hat{f}(x))^2]$$
+$$E[(y-\hat{f}(x))^2]  = E[(f(x) -\hat{f}(x))^2] + 2E[\epsilon(f(x) - \hat{f}(x))] + E[\epsilon^2]$$
+The middle term is 0. Because the mean of $\epsilon$ is 0, $Var(\epsilon) = E[\epsilon^2]$. Thus, we have: 
+$$E[(y-\hat{f}(x))^2] = E[(f(x) -\hat{f}(x))^2] + Var(\epsilon)$$
+Thus, to complete the proof, we just need to show that $E[(f(x) -\hat{f}(x))^2] = Var(\hat{f}(x_0)) + [Bias(\hat{f}(x_0))]^2$. 
+
+$$ E[(f(x) -\hat{f}(x))^2] = E[(f(x) - E(\hat{f}(x)) + E(\hat{f}(x)) -\hat{f}(x))^2] $$
+
+Combining terms (to simplify notations, let $f(x) = f$):
+$$ E[(f-\hat{f})^2] = E[( [f - E(\hat{f})] - [ \hat{f} - E(\hat{f})])^2] $$
+Expanding the square and applying the linearity of expectations:
+
+$$ E[(f-\hat{f})^2] = E[(f - E(\hat{f}))^2] + E[(\hat{f} -E(\hat{f}))^2] +2E[ (f - E(\hat{f})) (\hat{f} - E(\hat{f}))] $$
+Because the third term is zero, we have: 
+
+$$ E[(f-\hat{f})^2] = E(Bias(\hat{f})^2) + Var(\hat{f})$$
+Which is equivalent to: 
+$$ E[(f-\hat{f})^2] = Bias(\hat{f})^2 + Var(\hat{f})$$
+
+
+
+
+
+
