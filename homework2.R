@@ -14,6 +14,8 @@ abalone <- read_csv("abalone.csv")
 abalone <- abalone %>%
   mutate(age = rings + 1.5)
 
+abalone <- abalone %>%
+  select(-c(rings))
 #2
 set.seed(1)
 
@@ -24,7 +26,6 @@ abalone_test  <- testing(abalone_split)
 
 #3
 abalone_recipe <- recipe(age ~ ., data = abalone_train) %>%
-  step_rm(rings) %>%
   step_dummy(all_nominal_predictors()) %>%
   step_interact(terms = ~ type_M:shucked_weight) %>%
   step_interact(terms = ~ longest_shell:diameter) %>%
@@ -51,7 +52,7 @@ lm_fit %>%
 abalone_train_res <- predict(lm_fit, new_data = data.frame(
   type = "I" , longest_shell = 0.5, diameter = 0.1, 
   height = 0.3, whole_weight = 4, shucked_weight = 1,
-  viscera_weight = 2, shell_weight = 1 , rings = 1))
+  viscera_weight = 2, shell_weight = 1 ))
 
 abalone_train_res
 
